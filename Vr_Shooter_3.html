@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebXR Shooter Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/latest/Build/Cesium/Cesium.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@webxr-input-profiles/motion-controllers@latest"></script>
+    <script src="https://immersive-web.github.io/webxr-samples/js/webxr-polyfill.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/latest/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+</head>
+<body>
+    <div id="cesiumContainer" style="width: 100vw; height: 100vh;"></div>
+    <script>
+        let viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            sceneModePicker: false,
+            baseLayerPicker: false
+        });
+
+        let scene = viewer.scene;
+        let camera = viewer.camera;
+
+        // Load real-world 3D buildings
+        viewer.scene.primitives.add(new Cesium.Cesium3DTileset({
+            url: Cesium.IonResource.fromAssetId(96188) // Example Asset ID
+        }));
+
+        // WebXR Initialization
+        if (navigator.xr) {
+            navigator.xr.requestSession('immersive-vr').then(session => {
+                session.addEventListener('end', () => console.log("Exited VR"));
+            }).catch(err => console.log("WebXR not available", err));
+        }
+
+        // Player VR Controller Setup
+        let xrControllers = [];
+        function setupXRControllers(session) {
+            let inputSources = session.inputSources;
+            inputSources.forEach(inputSource => {
+                if (inputSource.targetRayMode === 'tracked-pointer') {
+                    xrControllers.push(inputSource);
+                }
+            });
+        }
+
+        // Player position
+        let player = viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(-74.006, 40.7128, 10), // New York City example
+            box: {
+                dimensions: new Cesium.Cartesian3(1.0, 2.0, 1.0),
+                material: Cesium.Color.BLUE
+            }
+        });
+
+        // Gun Model
+        let gun = viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(-74.006, 40.7128, 10),
+            model: {
+                uri: 'models/hk416.gltf',
+                scale: 0.5
+            }
+        });
+
+        // Enemy Spawning
+        function spawnEnemy() {
+            let enemy = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(-74.005, 40.713, 10),
+                model: {
+                    uri: 'models/ak47_enemy.gltf',
+                    scale: 1
+                }
+            });
+        }
+        spawnEnemy();
+
+        // VR Shooting Mechanism
+        function shoot() {
+            let bullet = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(-74.006, 40.7128, 10),
+                sphere: {
+                    radius: 0.2,
+                    material: Cesium.Color.RED
+                }
+            });
+            setTimeout(() => viewer.entities.remove(bullet), 2000);
+        }
+
+        // Bind VR Controller Trigger to Shoot
+        document.addEventListener('selectstart', shoot);
+
+        // Door System
+        class Door {
+            constructor(position, isLocked, openDirection, hingeSide) {
+                this.entity = viewer.entities.add({
+                    position: Cesium.Cartesian3.fromDegrees(position[0], position[1], position[2]),
+                    box: {
+                        dimensions: new Cesium.Cartesian3(1.0, 2.5, 0.2),
+                        material: Cesium.Color.BROWN
+                    }
+                });
+                this.isLocked = isLocked;
+                this.openDirection = openDirection; // 'inward' or 'outward'
+                this.hingeSide = hingeSide; // 'left' or 'right'
+            }
+
+            toggleDoor() {
+                if (!this.isLocked) {
+                    let angle = this.openDirection === 'inward' ? -Math.PI / 2 : Math.PI / 2;
+                    if (this.hingeSide === 'right') angle = -angle;
+                    this.entity.orientation = Cesium.Transforms.headingPitchRollQuaternion(
+                        this.entity.position.getValue(Cesium.JulianDate.now()),
+                        new Cesium.HeadingPitchRoll(angle, 0, 0)
+                    );
+                }
+            }
+        }
+
+        // Example Door Placement
+        let door1 = new Door([-74.004, 40.7135, 10], false, 'inward', 'left');
+        let door2 = new Door([-74.003, 40.713, 10], true, 'outward', 'right');
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'e') door1.toggleDoor();
+        });
+    </script>
+</body>
+</html>
